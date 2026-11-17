@@ -1,46 +1,47 @@
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type"
+};
+
+function respond(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json"
+    }
+  });
+}
+
 export default {
   async fetch(request, env) {
-    const corsHeaders = {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization"
-    };
+    const url = new URL(request.url);
 
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders });
     }
 
-    const url = new URL(request.url);
-
-    const respond = (data, status = 200) =>
-      new Response(JSON.stringify(data), {
-        status,
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json"
-        }
-      });
-
-    if (url.pathname === "/") {
+    if (url.pathname === "/health") {
       return respond({
-        name: "SENTINEL AI",
         status: "online",
-        version: "1.0"
+        assistant: "SENTINEL"
       });
     }
 
-    if (url.pathname === "/api/chat" && request.method === "POST") {
+    if (url.pathname === "/chat" && request.method === "POST") {
       try {
         const body = await request.json();
+        const message = body.message;
 
-        if (!body.message || typeof body.message !== "string") {
-          return respond({ error: "A message is required." }, 400);
+        if (!message || typeof message !== "string") {
+          return respond({ error: "Message is required" }, 400);
         }
 
         if (!env.AI) {
           return respond({
-            error: "AI service is not connected yet."
+            error: "AI binding is not configured"
           }, 503);
         }
 
@@ -50,29 +51,31 @@ export default {
             messages: [
               {
                 role: "system",
-                content: "You are SENTINEL, a helpful and responsible AI assistant."
+                content: "You are SENTINEL, a helpful and intelligent AI assistant. Be clear, useful and safety-conscious."
               },
               {
                 role: "user",
-                content: body.message
+                content: message
               }
             ]
           }
         );
 
         return respond({
-          success: true,
-          reply: result.response
+          assistant: "SENTINEL",
+          reply: result.response || "No response received."
         });
 
       } catch (error) {
         return respond({
-          error: "Unable to process your request."
+          error: "Unable to process request."
         }, 500);
       }
     }
 
-    return respond({ error: "Endpoint not found." }, 404);
+    return respond({
+      assistant: "SENTINEL",
+      message: "Sentinel backend is running."
+    });
   }
 };
-          

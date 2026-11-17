@@ -1,81 +1,108 @@
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type"
-};
-
-function respond(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json"
-    }
-  });
-}
-
 export default {
   async fetch(request, env) {
-    const url = new URL(request.url);
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization"
+    };
+
+    const jsonResponse = (data, status = 200) => {
+      return new Response(JSON.stringify(data), {
+        status,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json"
+        }
+      });
+    };
 
     if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders });
-    }
-
-    if (url.pathname === "/health") {
-      return respond({
-        status: "online",
-        assistant: "SENTINEL"
+      return new Response(null, {
+        status: 204,
+        headers: corsHeaders
       });
     }
 
-    if (url.pathname === "/chat" && request.method === "POST") {
+    const url = new URL(request.url);
+    const path = url.pathname.replace(/\/+$/, "") || "/";
+
+    // HOME ROUTE
+    if (request.method === "GET" && path === "/") {
+      return jsonResponse({
+        name: "SENTINEL AI",
+        status: "online",
+        version: "1.0",
+        message: "Sentinel AI backend is running."
+      });
+    }
+
+    // HEALTH ROUTES
+    if (
+      request.method === "GET" &&
+      (path === "/health" || path === "/api/health")
+    ) {
+      return jsonResponse({
+        status: "online",
+        service: "Sentinel AI",
+        message: "Health check successful."
+      });
+    }
+
+    // AI CHAT ROUTES
+    if (
+      request.method === "POST" &&
+      (path === "/api/chat" || path === "/chat")
+    ) {
       try {
         const body = await request.json();
-        const message = body.message;
 
-        if (!message || typeof message !== "string") {
-          return respond({ error: "Message is required" }, 400);
+        const messages = Array.isArray(body.messages)
+          ? body.messages
+          : [
+              {
+                role: "user",
+                content: body.message || body.prompt || ""
+              }
+            ];
+
+        if (!messages.length) {
+          return jsonResponse({
+            error: "Please provide a message."
+          }, 400);
         }
 
         if (!env.AI) {
-          return respond({
-            error: "AI binding is not configured"
-          }, 503);
+          return jsonResponse({
+            error: "AI binding is not configured."
+          }, 500);
         }
 
         const result = await env.AI.run(
           "@cf/meta/llama-3.1-8b-instruct",
           {
-            messages: [
-              {
-                role: "system",
-                content: "You are SENTINEL, a helpful and intelligent AI assistant. Be clear, useful and safety-conscious."
-              },
-              {
-                role: "user",
-                content: message
-              }
-            ]
+            messages
           }
         );
 
-        return respond({
-          assistant: "SENTINEL",
-          reply: result.response || "No response received."
+        return jsonResponse({
+          success: true,
+          response: result.response || "",
+          result
         });
 
       } catch (error) {
-        return respond({
-          error: "Unable to process request."
+        return jsonResponse({
+          success: false,
+          error: error.message || "AI processing failed."
         }, 500);
       }
     }
 
-    return respond({
-      assistant: "SENTINEL",
-      message: "Sentinel backend is running."
-    });
+    // UNKNOWN ROUTES
+    return jsonResponse({
+      error: "Route not found",
+      path
+    }, 404);
   }
 };
